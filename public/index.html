@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de Monitoreo DHT11</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="/socket.io/socket.io.js"></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🌡️ Sistema de Monitoreo DHT11</h1>
+            <p class="subtitle">Monitoreo en tiempo real desde Arduino</p>
+        </header>
+        
+        <div class="status-grid">
+            <div class="status-card temperature">
+                <div class="card-icon">🌡️</div>
+                <h2>Temperatura</h2>
+                <div class="value" id="temperature">--.-</div>
+                <div class="unit">°C</div>
+            </div>
+            
+            <div class="status-card humidity">
+                <div class="card-icon">💧</div>
+                <h2>Humedad</h2>
+                <div class="value" id="humidity">--.-</div>
+                <div class="unit">%</div>
+            </div>
+            
+            <div class="status-card ventilador">
+                <div class="card-icon">🌀</div>
+                <h2>Ventilador</h2>
+                <div class="status" id="ventiladorStatus">
+                    <span class="status-text">---</span>
+                    <div class="status-indicator"></div>
+                </div>
+            </div>
+            
+            <div class="status-card foco">
+                <div class="card-icon">💡</div>
+                <h2>Foco</h2>
+                <div class="status" id="focoStatus">
+                    <span class="status-text">---</span>
+                    <div class="status-indicator"></div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="connection-status">
+            <div class="status-indicator" id="connectionIndicator"></div>
+            <span id="connectionText">Conectando...</span>
+        </div>
+        
+        <div class="last-update">
+            <span>Última actualización: </span>
+            <strong id="lastUpdate">--:--:--</strong>
+        </div>
+        
+        <footer>
+            <p>Sistema desarrollado con Arduino + ESP32 + Node.js</p>
+        </footer>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
