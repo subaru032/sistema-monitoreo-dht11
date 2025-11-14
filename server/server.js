@@ -19,12 +19,9 @@ let sensorData = {
   humedad: 0,
   ventilador: false,
   foco: false,
-  lastUpdate: 'Esperando datos...',
+  lastUpdate: 'Esperando datos del Arduino...',
   conexion: 'desconectado'
 };
-
-// Variable para controlar simulación
-let modoSimulacion = true;
 
 // Ruta principal
 app.get('/', (req, res) => {
@@ -41,6 +38,11 @@ app.post('/api/data', (req, res) => {
   try {
     const { temperatura, humedad, ventilador, foco } = req.body;
     
+    // Validar datos
+    if (temperatura === undefined || humedad === undefined) {
+      throw new Error('Datos incompletos');
+    }
+    
     // Actualizar con datos reales
     sensorData.temperatura = parseFloat(temperatura);
     sensorData.humedad = parseFloat(humedad);
@@ -48,9 +50,6 @@ app.post('/api/data', (req, res) => {
     sensorData.foco = Boolean(foco);
     sensorData.lastUpdate = new Date().toLocaleTimeString();
     sensorData.conexion = 'conectado';
-    
-    // Desactivar simulación cuando lleguen datos reales
-    modoSimulacion = false;
     
     console.log(`📊 Datos REALES recibidos: ${temperatura}°C, ${humedad}%`);
     
@@ -60,7 +59,7 @@ app.post('/api/data', (req, res) => {
     res.json({ success: true, message: 'Datos recibidos' });
   } catch (error) {
     console.log('❌ Error recibiendo datos:', error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(400).json({ success: false, error: error.message });
   }
 });
 
@@ -68,26 +67,11 @@ app.post('/api/data', (req, res) => {
 app.get('/api/status', (req, res) => {
   res.json({
     status: 'online',
-    modo: modoSimulacion ? 'simulación' : 'datos reales',
-    puerto: process.env.PORT || 3000,
-    timestamp: new Date().toISOString()
+    modo: 'esperando datos reales del Arduino',
+    datos_recibidos: sensorData.conexion === 'conectado',
+    ultima_actualizacion: sensorData.lastUpdate
   });
 });
-
-// Simulación de datos (solo si no hay datos reales)
-setInterval(() => {
-  if (modoSimulacion) {
-    sensorData.temperatura = (20 + Math.random() * 8).toFixed(1);
-    sensorData.humedad = (60 + Math.random() * 20).toFixed(1);
-    sensorData.ventilador = parseFloat(sensorData.temperatura) > 24;
-    sensorData.foco = parseFloat(sensorData.temperatura) > 21 && !sensorData.ventilador;
-    sensorData.lastUpdate = new Date().toLocaleTimeString();
-    sensorData.conexion = 'simulación';
-    
-    console.log(`🔄 Datos SIMULADOS: ${sensorData.temperatura}°C`);
-    io.emit('sensorData', sensorData);
-  }
-}, 3000);
 
 // WebSocket para conexiones
 io.on('connection', (socket) => {
@@ -105,9 +89,9 @@ const PORT = process.env.PORT || 3000;
 
 server.listen(PORT, () => {
   console.log('🚀 =================================');
-  console.log('✅ Servidor iniciado correctamente');
+  console.log('✅ Servidor iniciado - SIN SIMULACIÓN');
   console.log(`📡 Puerto: ${PORT}`);
   console.log(`🌐 URL: http://localhost:${PORT}`);
-  console.log(`🔧 Modo: ${modoSimulacion ? 'SIMULACIÓN' : 'DATOS REALES'}`);
+  console.log('🔧 Modo: ESPERANDO DATOS REALES DEL ARDUINO');
   console.log('🚀 =================================');
 });

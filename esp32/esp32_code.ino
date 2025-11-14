@@ -3,42 +3,40 @@
 #include <ArduinoJson.h>
 #include <HardwareSerial.h>
 
-// ==================== CONFIGURACIÓN WIFI ====================
-const char* ssid = "TU_RED_WIFI";          // ← CAMBIA ESTO
-const char* password = "TU_PASSWORD_WIFI"; // ← CAMBIA ESTO
+// ================== CONFIGURACIÓN WIFI ==================
+const char* ssid = "TU_WIFI_SSID";           // ← CAMBIA ESTO
+const char* password = "TU_WIFI_PASSWORD";   // ← CAMBIA ESTO
 
-// ==================== URL DEL SERVIDOR ====================
-const char* serverURL = "https://tu-app.onrender.com/api/data"; // ← CAMBIA ESTO
+// ================== URL DE RENDER ==================
+const char* serverURL = "https://sistema-monitoreo-dhtil.onrender.com/api/data"; // ← USA TU URL
 
-// ==================== COMUNICACIÓN CON ARDUINO ====================
-HardwareSerial SerialArduino(1);  // Usar Serial1 para comunicación con Arduino
-#define RX_PIN 16                 // ESP32 RX ← Arduino TX
-#define TX_PIN 17                 // ESP32 TX → Arduino RX (no necesario)
+// ================== COMUNICACIÓN CON ARDUINO ==================
+HardwareSerial SerialArduino(1);
+#define RX_PIN 16   // ESP32 RX2 ← ARDUINO TX
+#define TX_PIN 17   // ESP32 TX2 → ARDUINO RX (no necesario)
 
-// ==================== VARIABLES DE CONTROL ====================
+// ================== VARIABLES ==================
 unsigned long lastSend = 0;
-const long sendInterval = 5000;   // Enviar datos cada 5 segundos
+const long sendInterval = 5000; // Enviar cada 5 segundos
+bool wifiConnected = false;
 
 void setup() {
-  // Iniciar comunicación con PC (Monitor Serial)
   Serial.begin(115200);
   
-  // Iniciar comunicación con Arduino
+  // Inicializar comunicación con Arduino
   SerialArduino.begin(115200, SERIAL_8N1, RX_PIN, TX_PIN);
   
   Serial.println();
-  Serial.println("🚀 Iniciando ESP32 - Puente Arduino→Internet");
+  Serial.println("🚀 ESP32 Iniciado");
+  Serial.println("📡 Conectando a WiFi...");
   
-  // Conectar a WiFi
   conectarWiFi();
-  
-  Serial.println("✅ ESP32 listo para recibir datos del Arduino");
-  Serial.println("📡 Esperando datos en formato: DATA:temperatura,humedad,ventilador,foco");
 }
 
 void loop() {
-  // Verificar y mantener conexión WiFi
+  // Verificar conexión WiFi
   if (WiFi.status() != WL_CONNECTED) {
+    wifiConnected = false;
     Serial.println("❌ WiFi desconectado - Reconectando...");
     conectarWiFi();
   }
@@ -49,126 +47,94 @@ void loop() {
     data.trim();
     
     if (data.startsWith("DATA:")) {
-      Serial.print("📨 Dato recibido de Arduino: ");
+      Serial.print("📨 Dato de Arduino: ");
       Serial.println(data);
       
-      // Procesar y enviar datos al servidor web
-      procesarYEnviarDatos(data);
+      // Procesar y enviar datos al servidor
+      if (wifiConnected && millis() - lastSend >= sendInterval) {
+        procesarYEnviarDatos(data);
+        lastSend = millis();
+      }
     }
-  }
-  
-  // Enviar heartbeat cada 30 segundos
-  if (millis() - lastSend > 30000) {
-    enviarHeartbeat();
-    lastSend = millis();
   }
   
   delay(100);
 }
 
 void conectarWiFi() {
-  Serial.println();
-  Serial.print("📡 Conectando a WiFi: ");
-  Serial.println(ssid);
-  
   WiFi.begin(ssid, password);
-  
   int intentos = 0;
+  
   while (WiFi.status() != WL_CONNECTED && intentos < 20) {
-    delay(500);
+    delay(1000);
     Serial.print(".");
     intentos++;
   }
   
   if (WiFi.status() == WL_CONNECTED) {
-    Serial.println();
-    Serial.println("✅ WiFi conectado!");
-    Serial.print("📶 IP Address: ");
+    wifiConnected = true;
+    Serial.println("\n✅ Conectado a WiFi!");
+    Serial.print("📡 IP: ");
     Serial.println(WiFi.localIP());
+    Serial.print("🌐 Servidor: ");
+    Serial.println(serverURL);
   } else {
-    Serial.println();
-    Serial.println("❌ Error conectando a WiFi");
+    Serial.println("\n❌ Falló conexión WiFi");
   }
 }
 
 void procesarYEnviarDatos(String data) {
-  if (WiFi.status() != WL_CONNECTED) {
-    Serial.println("❌ WiFi no conectado - No se pueden enviar datos");
-    return;
-  }
-  
-  HTTPClient http;
-  http.begin(serverURL);
-  http.addHeader("Content-Type", "application/json");
-  
-  // Parsear datos: "DATA:temp,hum,vent,foco"
-  // Ejemplo: "DATA:23.5,65.0,1,0"
-  data = data.substring(5); // Quitar "DATA:"
-  
-  int separators[3];
-  separators[0] = data.indexOf(',');
-  separators[1] = data.indexOf(',', separators[0] + 1);
-  separators[2] = data.indexOf(',', separators[1] + 1);
-  
-  if (separators[0] != -1 && separators[1] != -1 && separators[2] != -1) {
-    float temp = data.substring(0, separators[0]).toFloat();
-    float hum = data.substring(separators[0] + 1, separators[1]).toFloat();
-    bool vent = data.substring(separators[1] + 1, separators[2]).toInt();
-    bool foco = data.substring(separators[2] + 1).toInt();
-    
-    // Crear JSON para enviar
-    DynamicJsonDocument doc(200);
-    doc["temperatura"] = temp;
-    doc["humedad"] = hum;
-    doc["ventilador"] = vent;
-    doc["foco"] = foco;
-    
-    String jsonString;
-    serializeJson(doc, jsonString);
-    
-    Serial.print("📤 Enviando datos al servidor... ");
-    Serial.println(jsonString);
-    
-    int httpResponseCode = http.POST(jsonString);
-    
-    if (httpResponseCode == 200) {
-      Serial.println("✅ Datos enviados exitosamente al servidor!");
-    } else {
-      Serial.print("❌ Error enviando datos. Código: ");
-      Serial.println(httpResponseCode);
-      
-      // Intentar obtener respuesta de error
-      String response = http.getString();
-      Serial.println("Respuesta del servidor: " + response);
-    }
-    
-    http.end();
-  } else {
-    Serial.println("❌ Formato de datos incorrecto del Arduino");
-    Serial.println("Formato esperado: DATA:temperatura,humedad,ventilador,foco");
-  }
-}
-
-void enviarHeartbeat() {
   if (WiFi.status() == WL_CONNECTED) {
     HTTPClient http;
-    http.begin(String(serverURL));
+    http.begin(serverURL);
     http.addHeader("Content-Type", "application/json");
+    http.setTimeout(10000); // 10 segundos timeout
     
-    DynamicJsonDocument doc(100);
-    doc["device"] = "ESP32";
-    doc["status"] = "online";
-    doc["timestamp"] = millis();
+    // Parsear datos: "DATA:temp,hum,vent,foco"
+    // Ejemplo: "DATA:23.5,65.0,1,0"
+    data = data.substring(5); // Quitar "DATA:"
     
-    String jsonString;
-    serializeJson(doc, jsonString);
+    int separators[3];
+    separators[0] = data.indexOf(',');
+    separators[1] = data.indexOf(',', separators[0] + 1);
+    separators[2] = data.indexOf(',', separators[1] + 1);
     
-    int responseCode = http.POST(jsonString);
-    
-    if (responseCode == 200) {
-      Serial.println("💓 Heartbeat enviado - ESP32 online");
+    if (separators[0] != -1 && separators[1] != -1 && separators[2] != -1) {
+      float temp = data.substring(0, separators[0]).toFloat();
+      float hum = data.substring(separators[0] + 1, separators[1]).toFloat();
+      bool vent = data.substring(separators[1] + 1, separators[2]).toInt();
+      bool foco = data.substring(separators[2] + 1).toInt();
+      
+      // Crear JSON para enviar
+      DynamicJsonDocument doc(200);
+      doc["temperatura"] = temp;
+      doc["humedad"] = hum;
+      doc["ventilador"] = vent;
+      doc["foco"] = foco;
+      
+      String jsonString;
+      serializeJson(doc, jsonString);
+      
+      Serial.println("📤 Enviando al servidor...");
+      Serial.print("JSON: ");
+      Serial.println(jsonString);
+      
+      int httpResponseCode = http.POST(jsonString);
+      
+      if (httpResponseCode == 200) {
+        Serial.println("✅ Datos enviados exitosamente!");
+      } else {
+        Serial.print("❌ Error HTTP: ");
+        Serial.println(httpResponseCode);
+        
+        String response = http.getString();
+        Serial.print("Respuesta: ");
+        Serial.println(response);
+      }
+      
+      http.end();
+    } else {
+      Serial.println("❌ Formato de datos incorrecto del Arduino");
     }
-    
-    http.end();
   }
 }
